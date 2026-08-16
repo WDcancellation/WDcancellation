@@ -11,7 +11,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // First Login Force Reset States
   const [forceReset, setForceReset] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [tempUser, setTempUser] = useState<any>(null);
@@ -31,25 +30,33 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      const res = await fetch(`${supabaseUrl}/rest/v1/users?username=eq.${username}&password=eq.${password}`, {
+          method: 'GET',
+          headers: {
+              'apikey': supabaseKey,
+              'Content-Type': 'application/json'
+          }
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'فشل تسجيل الدخول');
+
+      if (data.length > 0) {
+        const loggedInUser = data[0];
+        
+        if (password === '123') {
+          setTempToken('temp-token');
+          setTempUser(loggedInUser);
+          setForceReset(true);
+        } else {
+          onLoginSuccess('success-token-' + loggedInUser.id, loggedInUser);
+        }
+      } else {
+        throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة');
       }
 
-      // Check if first login force reset is required (default password 123)
-      if (data.user.firstLogin || password === '123') {
-        setTempToken(data.token);
-        setTempUser(data.user);
-        setForceReset(true);
-      } else {
-        onLoginSuccess(data.token, data.user);
-      }
     } catch (err: any) {
       setError(err.message || 'حدث خطأ غير متوقع أثناء الاتصال بالخادم');
     } finally {
@@ -83,23 +90,25 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      const res = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${tempUser.id}`, {
+        method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tempToken}`
+          'apikey': supabaseKey,
+          'Prefer': 'return=minimal'
         },
-        body: JSON.stringify({ currentPassword: password, newPassword })
+        body: JSON.stringify({ password: newPassword })
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'فشل تغيير كلمة المرور');
+        throw new Error('فشل تحديث كلمة المرور في قاعدة البيانات');
       }
 
-      // Successfully reset, proceed to log user in with updated flags
-      const updatedUser = { ...tempUser, firstLogin: false, passwordChanged: true };
-      onLoginSuccess(tempToken, updatedUser);
+      const updatedUser = { ...tempUser, password: newPassword };
+      onLoginSuccess('success-token-' + updatedUser.id, updatedUser);
     } catch (err: any) {
       setResetError(err.message || 'حدث خطأ أثناء حفظ كلمة المرور الجديدة');
     } finally {
@@ -117,7 +126,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </div>
             <h2 className="text-xl font-bold text-white">حماية وتأمين الحساب</h2>
             <p className="mt-2 text-sm text-neutral-400">
-              مرحباً <span className="font-semibold text-amber-400">{tempUser?.name}</span>. هذه المرة الأولى التي تقوم فيها بتسجيل الدخول باستخدام كلمة المرور الافتراضية. يرجى اختيار كلمة مرور جديدة لمتابعة الدخول.
+              مرحباً <span className="font-semibold text-amber-400">{tempUser?.username}</span>. هذه المرة الأولى التي تقوم فيها بتسجيل الدخول باستخدام كلمة المرور الافتراضية. يرجى اختيار كلمة مرور جديدة لمتابعة الدخول.
             </p>
           </div>
 
